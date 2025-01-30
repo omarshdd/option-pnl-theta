@@ -89,17 +89,22 @@ def update_graph(ticker, underlying, premium, contract_size, option_type, delta,
     
     start_date = datetime.date.fromisoformat(date_purchased)
     end_date = datetime.date.fromisoformat(expiry_date)
-    market_days = np.array([start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days)])
+    days_to_expiry = (end_date - start_date).days
+    market_days = np.array([start_date + datetime.timedelta(days=i) for i in range(days_to_expiry)])
     
     adjusted_price = underlying * (1 + hypo_change / 100)
     option_multiplier = 100  # Standard contract size for options (100 shares per contract)
     total_contracts = contract_size * option_multiplier
     
-    estimated_pnl = (adjusted_price - underlying) * delta * total_contracts - premium * total_contracts - (theta * np.arange(len(market_days)) * total_contracts)
+    # Exponential Theta Decay Model
+    theta_decay_factor = np.exp(-np.linspace(0, 3, days_to_expiry))  # Simulating accelerating time decay
+    theta_total_loss = np.cumsum(theta * theta_decay_factor) * total_contracts
+    
+    estimated_pnl = (adjusted_price - underlying) * delta * total_contracts - premium * total_contracts - theta_total_loss
     pnl_percentage = (estimated_pnl / (premium * total_contracts)) * 100
     
     pnl_fig = go.Figure()
-    pnl_fig.add_trace(go.Scatter(x=market_days, y=estimated_pnl, mode='lines', name='Estimated P&L'))
+    pnl_fig.add_trace(go.Scatter(x=market_days, y=estimated_pnl, mode='lines', name='Estimated P&L ($)'))
     pnl_fig.add_trace(go.Scatter(x=market_days, y=pnl_percentage, mode='lines', name='P&L (%)', yaxis='y2'))
     pnl_fig.update_layout(
         title="P&L vs. Market Dates to Expiry",
