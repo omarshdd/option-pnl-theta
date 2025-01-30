@@ -35,8 +35,8 @@ app.layout = dbc.Container([
                     html.Label("Option Premium:"),
                     dcc.Input(id='option-premium', type='number', value=5, className="form-control"),
                     
-                    html.Label("Contract Size:"),
-                    dcc.Input(id='contract-size', type='number', value=100, className="form-control"),
+                    html.Label("Contract Size (number of option contracts):"),
+                    dcc.Input(id='contract-size', type='number', value=1, className="form-control"),
                 ])
             ], className="shadow-lg p-3 mb-4 bg-white rounded"),
 
@@ -59,18 +59,19 @@ app.layout = dbc.Container([
         ], width=4),
         
         dbc.Col([
-            dcc.Graph(id='pnl-graph'),
             html.Label("Stock Price Adjustment (% Change):"),
             dcc.Slider(id='hypothetical-slider', min=-20, max=20, step=1, value=0, 
                        marks={i: f"{i}%" for i in range(-20, 21, 5)}),
+            html.Div(id='adjusted-price-display', className="text-center mt-2"),
+            dcc.Graph(id='pnl-graph'),
             dcc.Graph(id='candlestick-chart')
         ], width=8)
     ], align="center")
 ], fluid=True)
 
-# Callback to update P&L graph and fetch stock data
+# Callback to update P&L graph, stock price display, and fetch stock data
 @app.callback(
-    [Output('pnl-graph', 'figure'), Output('candlestick-chart', 'figure')],
+    [Output('pnl-graph', 'figure'), Output('candlestick-chart', 'figure'), Output('adjusted-price-display', 'children')],
     [Input('ticker-symbol', 'value'),
      Input('underlying-price', 'value'),
      Input('option-premium', 'value'),
@@ -84,20 +85,29 @@ app.layout = dbc.Container([
 )
 def update_graph(ticker, underlying, premium, contract_size, option_type, delta, theta, date_purchased, expiry_date, hypo_change):
     if not date_purchased or not expiry_date:
-        return go.Figure(), go.Figure()
+        return go.Figure(), go.Figure(), ""
     
     start_date = datetime.date.fromisoformat(date_purchased)
     end_date = datetime.date.fromisoformat(expiry_date)
     market_days = np.array([start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days)])
-    stock_prices = underlying * (1 + hypo_change / 100)
-    estimated_pnl = (stock_prices - underlying) * delta * contract_size - premium * contract_size - (theta * np.arange(len(market_days)) * contract_size)
+    
+    adjusted_price = underlying * (1 + hypo_change / 100)
+    option_multiplier = 100  # Standard contract size for options (100 shares per contract)
+    total_contracts = contract_size * option_multiplier
+    
+    estimated_pnl = (adjusted_price - underlying) * delta * total_contracts - premium * total_contracts - (theta * np.arange(len(market_days)) * total_contracts)
+    pnl_percentage = (estimated_pnl / (premium * total_contracts)) * 100
     
     pnl_fig = go.Figure()
     pnl_fig.add_trace(go.Scatter(x=market_days, y=estimated_pnl, mode='lines', name='Estimated P&L'))
-    pnl_fig.update_layout(title="P&L vs. Market Dates to Expiry",
-                          xaxis_title="Market Date",
-                          yaxis_title="Estimated P&L",
-                          template="plotly_dark")
+    pnl_fig.add_trace(go.Scatter(x=market_days, y=pnl_percentage, mode='lines', name='P&L (%)', yaxis='y2'))
+    pnl_fig.update_layout(
+        title="P&L vs. Market Dates to Expiry",
+        xaxis_title="Market Date",
+        yaxis_title="Estimated P&L ($)",
+        yaxis2={"title": "P&L (%)", "overlaying": "y", "side": "right"},
+        template="plotly_dark"
+    )
     
     try:
         stock_data = yf.Ticker(ticker).history(period='1mo')
@@ -113,7 +123,9 @@ def update_graph(ticker, underlying, premium, contract_size, option_type, delta,
         candlestick_fig = go.Figure()
         candlestick_fig.update_layout(title="Stock Data Unavailable", template="plotly_dark")
     
-    return pnl_fig, candlestick_fig
+    adjusted_price_display = f"Adjusted Stock Price: ${adjusted_price:.2f} ({hypo_change}%)"
+    
+    return pnl_fig, candlestick_fig, adjusted_price_display
 
 # Run the app with proper port binding for Render
 if __name__ == '__main__':
