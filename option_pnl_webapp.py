@@ -46,8 +46,8 @@ app.layout = dbc.Container([
                     html.Label("Delta at Purchase:"),
                     dcc.Input(id='delta-purchase', type='number', value=0.5, className="form-control"),
                     
-                    html.Label("Theta at Purchase (per day):"),
-                    dcc.Input(id='theta-purchase', type='number', value=-0.02, className="form-control"),
+                    html.Label("Theta at Purchase (enter as positive, automatically adjusted):"),
+                    dcc.Input(id='theta-purchase', type='number', value=0.02, className="form-control"),
                     
                     html.Label("Date Purchased:"),
                     dcc.DatePickerSingle(id='date-purchased', date=str(datetime.date.today() - datetime.timedelta(days=10))),
@@ -96,11 +96,16 @@ def update_graph(ticker, underlying, premium, contract_size, option_type, delta,
     option_multiplier = 100  # Standard contract size for options (100 shares per contract)
     total_contracts = contract_size * option_multiplier
     
-    # Exponential Theta Decay Model
-    theta_decay_factor = np.exp(-np.linspace(0, 3, days_to_expiry))  # Simulating accelerating time decay
-    theta_total_loss = np.cumsum(theta * theta_decay_factor) * total_contracts
+    # Automatically make Theta negative since it's time decay
+    theta = -abs(theta)
     
-    estimated_pnl = (adjusted_price - underlying) * delta * total_contracts - premium * total_contracts - theta_total_loss
+    # Exponential Theta Decay Model
+    theta_decay_factor = np.exp(-np.linspace(0, 3, days_to_expiry))
+    extrinsic_value = premium * np.exp(-0.1 * np.arange(days_to_expiry))  # Exponential decay of premium
+    intrinsic_value = max(adjusted_price - underlying, 0) if option_type == 'call' else max(underlying - adjusted_price, 0)
+    option_value = np.maximum(intrinsic_value, extrinsic_value)
+    
+    estimated_pnl = (option_value * total_contracts) - (premium * total_contracts)
     pnl_percentage = (estimated_pnl / (premium * total_contracts)) * 100
     
     pnl_fig = go.Figure()
