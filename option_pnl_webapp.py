@@ -44,28 +44,25 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     html.H5("Greeks & Expiry"),
                     html.Label("Delta at Purchase:"),
-                    dcc.Slider(id='delta-purchase', min=-1, max=1, step=0.01, value=0.5, 
-                               marks={-1: "-1", 0: "0", 1: "1"}),
+                    dcc.Input(id='delta-purchase', type='number', value=0.5, className="form-control"),
                     
                     html.Label("Theta at Purchase (per day):"),
-                    dcc.Slider(id='theta-purchase', min=-1, max=0, step=0.01, value=-0.02, 
-                               marks={-1: "-1", 0: "0"}),
+                    dcc.Input(id='theta-purchase', type='number', value=-0.02, className="form-control"),
                     
                     html.Label("Date Purchased:"),
                     dcc.DatePickerSingle(id='date-purchased', date=str(datetime.date.today() - datetime.timedelta(days=10))),
                     
                     html.Label("Expiry Date:"),
                     dcc.DatePickerSingle(id='expiry-date', date=str(datetime.date.today() + datetime.timedelta(days=30))),
-                    
-                    html.Label("Stock Price Adjustment (% Change):"),
-                    dcc.Slider(id='hypothetical-slider', min=-20, max=20, step=1, value=0, 
-                               marks={i: f"{i}%" for i in range(-20, 21, 5)})
                 ])
             ], className="shadow-lg p-3 mb-4 bg-white rounded"),
         ], width=4),
         
         dbc.Col([
             dcc.Graph(id='pnl-graph'),
+            html.Label("Stock Price Adjustment (% Change):"),
+            dcc.Slider(id='hypothetical-slider', min=-20, max=20, step=1, value=0, 
+                       marks={i: f"{i}%" for i in range(-20, 21, 5)}),
             dcc.Graph(id='candlestick-chart')
         ], width=8)
     ], align="center")
@@ -91,8 +88,8 @@ def update_graph(ticker, underlying, premium, contract_size, option_type, delta,
     
     start_date = datetime.date.fromisoformat(date_purchased)
     end_date = datetime.date.fromisoformat(expiry_date)
-    market_days = np.arange(start_date, end_date, datetime.timedelta(days=1)).astype(datetime.date)
-    stock_prices = np.linspace(underlying * 0.8, underlying * 1.2, len(market_days)) * (1 + hypo_change / 100)
+    market_days = np.array([start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days)])
+    stock_prices = underlying * (1 + hypo_change / 100)
     estimated_pnl = (stock_prices - underlying) * delta * contract_size - premium * contract_size - (theta * np.arange(len(market_days)) * contract_size)
     
     pnl_fig = go.Figure()
@@ -120,5 +117,5 @@ def update_graph(ticker, underlying, premium, contract_size, option_type, delta,
 
 # Run the app with proper port binding for Render
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8050))  # Render assigns a port dynamically
-    app.run_server(host='0.0.0.0', port=port, debug=False)
+    port = int(os.environ.get("PORT", 10000))  # Render assigns a port dynamically
+    app.run_server(host='0.0.0.0', port=port, debug=True)
