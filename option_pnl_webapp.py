@@ -54,11 +54,12 @@ app.layout = dbc.Container([
                     html.Label("Date Purchased:"),
                     dcc.DatePickerSingle(id='date-purchased', date=str(datetime.date.today() - datetime.timedelta(days=10))),
                     
-                    html.Label("Current Date:"),
-                    dcc.DatePickerSingle(id='current-date', date=str(datetime.date.today())),
-                    
                     html.Label("Expiry Date:"),
                     dcc.DatePickerSingle(id='expiry-date', date=str(datetime.date.today() + datetime.timedelta(days=30))),
+                    
+                    html.Label("Stock Price Adjustment (% Change):"),
+                    dcc.Slider(id='hypothetical-slider', min=-20, max=20, step=1, value=0, 
+                               marks={i: f"{i}%" for i in range(-20, 21, 5)})
                 ])
             ], className="shadow-lg p-3 mb-4 bg-white rounded"),
         ], width=4),
@@ -81,21 +82,23 @@ app.layout = dbc.Container([
      Input('delta-purchase', 'value'),
      Input('theta-purchase', 'value'),
      Input('date-purchased', 'date'),
-     Input('current-date', 'date'),
-     Input('expiry-date', 'date')]
+     Input('expiry-date', 'date'),
+     Input('hypothetical-slider', 'value')]
 )
-def update_graph(ticker, underlying, premium, contract_size, option_type, delta, theta, date_purchased, current_date, expiry_date):
-    if not date_purchased or not current_date or not expiry_date:
+def update_graph(ticker, underlying, premium, contract_size, option_type, delta, theta, date_purchased, expiry_date, hypo_change):
+    if not date_purchased or not expiry_date:
         return go.Figure(), go.Figure()
     
-    days_to_expiry = (datetime.date.fromisoformat(expiry_date) - datetime.date.fromisoformat(current_date)).days
-    price_range = np.linspace(underlying * 0.8, underlying * 1.2, 50)
-    estimated_pnl = (price_range - underlying) * delta * contract_size - premium * contract_size - (theta * days_to_expiry * contract_size)
+    start_date = datetime.date.fromisoformat(date_purchased)
+    end_date = datetime.date.fromisoformat(expiry_date)
+    market_days = np.arange(start_date, end_date, datetime.timedelta(days=1)).astype(datetime.date)
+    stock_prices = np.linspace(underlying * 0.8, underlying * 1.2, len(market_days)) * (1 + hypo_change / 100)
+    estimated_pnl = (stock_prices - underlying) * delta * contract_size - premium * contract_size - (theta * np.arange(len(market_days)) * contract_size)
     
     pnl_fig = go.Figure()
-    pnl_fig.add_trace(go.Scatter(x=price_range, y=estimated_pnl, mode='lines', name='Estimated P&L'))
-    pnl_fig.update_layout(title="P&L vs. Hypothetical Stock Price with Theta Decay",
-                          xaxis_title="Stock Price",
+    pnl_fig.add_trace(go.Scatter(x=market_days, y=estimated_pnl, mode='lines', name='Estimated P&L'))
+    pnl_fig.update_layout(title="P&L vs. Market Dates to Expiry",
+                          xaxis_title="Market Date",
                           yaxis_title="Estimated P&L",
                           template="plotly_dark")
     
