@@ -3,3 +3,4 @@ plotly
 numpy
 gunicorn
 dash-bootstrap-components
+yfinance
